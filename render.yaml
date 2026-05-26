@@ -29,11 +29,11 @@ services:
         generateValue: true
 
       - key: APP_URL
-        value: https://mensajesparatodos.onrender.com
+        value: https://mensajesparatodos.free.laravel.cloud
 
       # ASSET_URL asegura que Vite sirva assets sobre HTTPS
       - key: ASSET_URL
-        value: https://mensajesparatodos.onrender.com
+        value: https://mensajesparatodos.free.laravel.cloud
 
       - key: APP_TIMEZONE
         value: America/Mexico_City

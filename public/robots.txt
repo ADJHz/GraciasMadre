@@ -17,4 +17,4 @@ Allow: /build/
 Allow: /favicon.svg
 Allow: /og-image.png
 
-Sitemap: https://mensajesparatodos.onrender.com/sitemap.xml
+Sitemap: https://mensajesparatodos.free.laravel.cloud/sitemap.xml
