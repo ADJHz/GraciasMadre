@@ -66,13 +66,20 @@
 }
 
 @layer base {
-  /* Fotos con forma: llenan mejor el recorte y respetan la orientación original. */
+  /* Fotos con forma: se ajustan al recorte sin perder partes y respetan la orientación original. */
   img[class*="img-"],
   [class*="shape-"] > img {
-    object-fit: cover !important;
+    object-fit: contain !important;
     object-position: center center;
     image-orientation: from-image;
     display: block;
+  }
+
+  @media (max-width: 640px) {
+    img[class*="img-"] {
+      width: clamp(160px, 46vw, 220px) !important;
+      height: clamp(160px, 46vw, 220px) !important;
+    }
   }
 }
 
