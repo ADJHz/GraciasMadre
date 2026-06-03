@@ -85,11 +85,13 @@
             </div>
           </div>
 
-          <form method="POST" action="{{ route('mensajes.store') }}" x-ref="form" enctype="multipart/form-data">
+          <form method="POST" action="{{ route('mensajes.store') }}" x-ref="form" enctype="multipart/form-data" @submit="enviarFormulario($event)">
             @csrf
             <input type="hidden" name="mensaje" x-bind:value="mensajeHTML">
             <input type="hidden" name="imagen_forma" x-model="imagenForma">
             <input type="hidden" name="imagen_marco" x-model="imagenMarco">
+            <input type="hidden" name="imagen_focus_x" x-model="imagenFocoX">
+            <input type="hidden" name="imagen_focus_y" x-model="imagenFocoY">
             <input type="hidden" name="template" x-model="templateSeleccionado">
             @if($ocasion)<input type="hidden" name="ocasion_id" value="{{ $ocasion->id }}">@endif
 
@@ -401,26 +403,47 @@
 
                   {{-- Foto especial --}}
                   <div class="p-4 bg-violet-50 rounded-2xl border border-violet-100">
-                <p class="text-sm font-semibold text-gray-700 mb-3">🖼️ Foto especial <span class="text-gray-400 font-normal">(opcional)</span></p>
+                <p class="text-sm font-semibold text-gray-700 mb-1">🖼️ Foto especial <span class="text-gray-400 font-normal">(opcional)</span></p>
+                <p class="text-[11px] text-gray-500 mb-3">Arrastra la imagen dentro del marco para elegir el recorte antes de guardar.</p>
                 <div class="flex flex-col xl:flex-row gap-4">
-                  <div class="flex flex-col items-center gap-2 flex-shrink-0">
-                    <div :style="getMarcoStyle()" class="transition-all duration-300">
-                      <div class="w-20 h-20 sm:w-24 sm:h-24 overflow-hidden transition-all duration-300" :style="getFormaStyle()">
+                  <div class="flex flex-col items-center gap-3 flex-shrink-0 w-full xl:w-[320px]">
+                    <div :style="getMarcoStyle()" class="transition-all duration-300 w-full">
+                      <div class="crop-frame w-full max-w-[320px] mx-auto"
+                           :class="{ 'is-dragging': arrastrandoImagen }"
+                           :style="getCropStageStyle()"
+                           @pointerdown="iniciarArrastreImagen($event)"
+                           @pointermove="moverArrastreImagen($event)"
+                           @pointerup="terminarArrastreImagen()"
+                           @pointercancel="terminarArrastreImagen()"
+                           @pointerleave="terminarArrastreImagen()">
                         <template x-if="imagenPreview">
-                          <img :src="imagenPreview" class="w-full h-full object-contain bg-white" alt="">
+                          <template>
+                            <div class="crop-frame__grid"></div>
+                            <div class="crop-frame__target"></div>
+                            <div class="crop-frame__label">Arrastra para elegir el encuadre</div>
+                          </template>
                         </template>
                         <template x-if="!imagenPreview">
-                          <div class="w-full h-full bg-violet-100 flex items-center justify-center text-3xl rounded-lg">🖼️</div>
+                          <div class="absolute inset-0 flex items-center justify-center text-center px-6 text-gray-400">
+                            <div>
+                              <div class="text-5xl mb-3">🖼️</div>
+                              <p class="text-sm font-semibold text-gray-500">Sube una foto para empezar</p>
+                              <p class="text-[11px] mt-1">Aquí podrás definir qué parte se conserva.</p>
+                            </div>
+                          </div>
                         </template>
                       </div>
                     </div>
                     <label class="cursor-pointer px-3 py-1.5 bg-violet-600 text-white text-xs font-bold rounded-full hover:bg-violet-700 transition">
                       <span x-text="imagenPreview ? '📸 Cambiar' : '📸 Subir foto'"></span>
-                      <input type="file" name="imagen" accept="image/jpeg,image/png,image/webp,image/gif" class="hidden" @change="seleccionarImagen($event)">
+                      <input type="file" name="imagen" accept="image/jpeg,image/png,image/webp,image/gif" class="hidden" x-ref="imagenInput" @change="seleccionarImagen($event)">
                     </label>
                     <button type="button" x-show="imagenPreview" @click="quitarImagen()" class="text-xs text-red-400 hover:text-red-600 transition">✕ Quitar</button>
                   </div>
                   <div class="flex-1 space-y-3 min-w-0">
+                    <div class="rounded-2xl border border-violet-100 bg-white/70 px-3 py-2 text-[11px] text-violet-700">
+                      <strong>Tip:</strong> en fotos horizontales mueve izquierda/derecha; en verticales mueve arriba/abajo. La imagen se exporta ya recortada.
+                    </div>
                     <div>
                       <p class="text-xs font-semibold text-gray-600 mb-1.5">Forma:</p>
                       <div class="grid grid-cols-4 sm:grid-cols-7 gap-1">
@@ -667,6 +690,13 @@ function crearMensaje() {
         imagenForma: '{{ old('imagen_forma', 'circulo') }}',
         imagenMarco: '{{ old('imagen_marco', 'ninguno') }}',
         imagenPreview: null,
+        imagenObjectUrl: null,
+        imagenArchivo: null,
+        imagenFocoX: 50,
+        imagenFocoY: 50,
+        imagenRecorteDirty: false,
+        arrastrandoImagen: false,
+        submitImagenEnCurso: false,
         colorTexto: '#000000',
         colorResaltado: '#FFFF00',
         activos: { bold: false, italic: false, underline: false, strikeThrough: false },
@@ -1227,17 +1257,220 @@ function crearMensaje() {
         getFormaStyle() { return this.getFormaStyleRaw(); },
         getMarcoStyle() { return this.getMarcoStyleRaw(); },
 
+        getCropStageStyle() {
+            if (!this.imagenPreview) return '';
+            return `--crop-focus-x:${this.imagenFocoX}%;--crop-focus-y:${this.imagenFocoY}%;background-image:url(${JSON.stringify(this.imagenPreview)});`;
+        },
+
+        enviarFormulario(event) {
+            event.preventDefault();
+            const form = this.$refs.form;
+            if (!form || (typeof form.reportValidity === 'function' && !form.reportValidity())) {
+                return;
+            }
+
+            this.submitImagenEnCurso = true;
+            this.prepararImagenParaEnvio()
+                .then(() => form.submit())
+                .catch((error) => {
+                    this.submitImagenEnCurso = false;
+                    alert(error?.message || 'No se pudo preparar la imagen para guardar.');
+                });
+        },
+
+        iniciarArrastreImagen(event) {
+            if (!this.imagenPreview) return;
+            if (event.button !== undefined && event.button !== 0) return;
+            this.arrastrandoImagen = true;
+            this.actualizarFocoDesdeEvento(event);
+            event.currentTarget?.setPointerCapture?.(event.pointerId);
+        },
+
+        moverArrastreImagen(event) {
+            if (!this.arrastrandoImagen) return;
+            this.actualizarFocoDesdeEvento(event);
+        },
+
+        terminarArrastreImagen() {
+            if (!this.arrastrandoImagen) return;
+            this.arrastrandoImagen = false;
+            this.emitirPreview();
+        },
+
+        actualizarFocoDesdeEvento(event) {
+            const frame = event.currentTarget;
+            if (!frame) return;
+            const rect = frame.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
+
+            const x = Math.max(0, Math.min(100, Math.round(((event.clientX - rect.left) / rect.width) * 100)));
+            const y = Math.max(0, Math.min(100, Math.round(((event.clientY - rect.top) / rect.height) * 100)));
+            this.establecerFocoImagen(x, y);
+        },
+
+        establecerFocoImagen(x, y) {
+            this.imagenFocoX = Math.max(0, Math.min(100, Math.round(Number(x) || 50)));
+            this.imagenFocoY = Math.max(0, Math.min(100, Math.round(Number(y) || 50)));
+            this.imagenRecorteDirty = true;
+            this.emitirPreview();
+        },
+
+        limpiarReferenciaImagenTemporal() {
+            if (this.imagenObjectUrl && String(this.imagenPreview || '').startsWith('blob:')) {
+                try { URL.revokeObjectURL(this.imagenObjectUrl); } catch (_) {}
+            }
+            this.imagenObjectUrl = null;
+        },
+
+        async cargarMetadatosImagen(src) {
+            if (!src) return;
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                    this.imagenNaturalWidth = img.naturalWidth || 0;
+                    this.imagenNaturalHeight = img.naturalHeight || 0;
+                    resolve({ width: img.naturalWidth || 0, height: img.naturalHeight || 0 });
+                };
+                img.onerror = reject;
+                img.src = src;
+            });
+        },
+
+        async prepararImagenParaEnvio() {
+            if (this.eliminarImagen || !this.imagenRecorteDirty || !this.imagenPreview) {
+                this.submitImagenEnCurso = false;
+                return;
+            }
+
+            const input = this.$refs.imagenInput || document.querySelector('input[name="imagen"]');
+            if (!input) throw new Error('No se encontró el campo de imagen.');
+
+            const blobFuente = this.imagenArchivo
+                ? this.imagenArchivo
+                : await this.obtenerBlobDesdeFuente(this.imagenPreview);
+            if (!blobFuente) throw new Error('No se pudo leer la imagen seleccionada.');
+
+            const blobProcesado = await this.recortarImagenBlob(blobFuente);
+            const mime = blobProcesado.type || this.obtenerMimeSalida(blobFuente);
+            const extension = mime === 'image/png' ? 'png' : 'jpg';
+            const nombreBase = this.obtenerNombreBaseImagen(this.imagenArchivo?.name || this.imagenPreview || 'imagen.jpg');
+            const archivoFinal = new File([blobProcesado], `${nombreBase}-encuadrada.${extension}`, { type: mime });
+
+            const dt = new DataTransfer();
+            dt.items.add(archivoFinal);
+            input.files = dt.files;
+
+            this.limpiarReferenciaImagenTemporal();
+            this.imagenObjectUrl = URL.createObjectURL(archivoFinal);
+            this.imagenPreview = this.imagenObjectUrl;
+            this.imagenArchivo = archivoFinal;
+            this.imagenRecorteDirty = false;
+            this.submitImagenEnCurso = false;
+        },
+
+        async obtenerBlobDesdeFuente(src) {
+            const response = await fetch(src);
+            if (!response.ok) {
+                throw new Error('No se pudo abrir la imagen para el recorte.');
+            }
+            return response.blob();
+        },
+
+        async crearBitmapDesdeBlob(blob) {
+            if (typeof createImageBitmap === 'function') {
+                try {
+                    return await createImageBitmap(blob, { imageOrientation: 'from-image' });
+                } catch (_) {
+                    try {
+                        return await createImageBitmap(blob);
+                    } catch (_) {}
+                }
+            }
+
+            const src = URL.createObjectURL(blob);
+            try {
+                return await new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.onerror = reject;
+                    img.src = src;
+                });
+            } finally {
+                try { URL.revokeObjectURL(src); } catch (_) {}
+            }
+        },
+
+        async recortarImagenBlob(blob) {
+            const bitmap = await this.crearBitmapDesdeBlob(blob);
+            try {
+                const width = bitmap.width || 0;
+                const height = bitmap.height || 0;
+                if (!width || !height) throw new Error('La imagen no tiene dimensiones válidas.');
+
+                const side = Math.min(width, height);
+                const outSide = Math.min(1600, side);
+                const sx = Math.round((width - side) * (this.imagenFocoX / 100));
+                const sy = Math.round((height - side) * (this.imagenFocoY / 100));
+
+                const canvas = document.createElement('canvas');
+                canvas.width = outSide;
+                canvas.height = outSide;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) throw new Error('No se pudo crear el lienzo de recorte.');
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, outSide, outSide);
+                ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, outSide, outSide);
+
+                const mime = this.obtenerMimeSalida(blob);
+                return await new Promise((resolve, reject) => {
+                    canvas.toBlob(
+                        (salida) => salida ? resolve(salida) : reject(new Error('No se pudo exportar la imagen recortada.')),
+                        mime,
+                        mime === 'image/jpeg' ? 0.92 : undefined
+                    );
+                });
+            } finally {
+                if (typeof bitmap.close === 'function') {
+                    bitmap.close();
+                }
+            }
+        },
+
+        obtenerMimeSalida(blob) {
+            return (blob?.type || '').toLowerCase() === 'image/png' ? 'image/png' : 'image/jpeg';
+        },
+
+        obtenerNombreBaseImagen(nombre) {
+            return String(nombre || 'imagen.jpg')
+                .split(/[\\/]/)
+                .pop()
+                .replace(/\.[^.]+$/, '') || 'imagen';
+        },
+
         seleccionarImagen(e) {
             const file = e.target.files[0];
             if (!file) return;
             if (file.size > 5 * 1024 * 1024) { alert('La imagen no debe superar 5MB.'); e.target.value = ''; return; }
-            const lector = new FileReader();
-            lector.onload = (ev) => { this.imagenPreview = ev.target.result; this.emitirPreview(); };
-            lector.readAsDataURL(file);
+            this.limpiarReferenciaImagenTemporal();
+            this.imagenArchivo = file;
+            this.imagenRecorteDirty = true;
+            this.imagenObjectUrl = URL.createObjectURL(file);
+            this.imagenPreview = this.imagenObjectUrl;
+            this.imagenFocoX = 50;
+            this.imagenFocoY = 50;
+            this.cargarMetadatosImagen(this.imagenPreview).finally(() => this.emitirPreview());
         },
 
         quitarImagen() {
+            this.limpiarReferenciaImagenTemporal();
             this.imagenPreview = null;
+            this.imagenArchivo = null;
+            this.imagenRecorteDirty = false;
+            this.arrastrandoImagen = false;
+            this.imagenFocoX = 50;
+            this.imagenFocoY = 50;
             const input = document.querySelector('input[name="imagen"]');
             if (input) input.value = '';
             this.emitirPreview();

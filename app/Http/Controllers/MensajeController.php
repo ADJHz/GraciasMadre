@@ -52,6 +52,8 @@ class MensajeController extends Controller
             'imagen'       => ['nullable', 'image', 'max:5120'],
             'imagen_forma' => ['nullable', 'string', 'in:ninguna,cuadrado,circulo,corazon,estrella,hexagono,diamante'],
             'imagen_marco' => ['nullable', 'string', 'in:ninguno,morado,dorado,rosa,verde,sombra,blanco'],
+            'imagen_foco_x' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'imagen_foco_y' => ['nullable', 'integer', 'min:0', 'max:100'],
             'template'     => ['nullable', 'string', 'in:' . implode(',', array_keys(\App\Helpers\TemplateHelper::configsParaPreview()))],
             'personaje_origen' => ['nullable', 'string', 'in:tema,dicebear,custom,ninguno'],
             'personaje_estilo' => ['nullable', 'string', 'max:30'],
@@ -64,7 +66,9 @@ class MensajeController extends Controller
 
         // Subir imagen si existe
         $imagenPath = null;
+        $focoImagen = [50, 50];
         if ($request->hasFile('imagen') && $request->file('imagen')->isValid()) {
+            $focoImagen = $this->focoImagenSugerido($request->file('imagen'));
             $imagenPath = $this->guardarImagenMensajeSinRecorte($request->file('imagen'));
         }
 
@@ -104,6 +108,8 @@ class MensajeController extends Controller
             'imagen_path'  => $imagenPath,
             'imagen_forma' => $request->imagen_forma ?? 'circulo',
             'imagen_marco' => $request->imagen_marco ?? 'ninguno',
+            'imagen_foco_x' => (int) ($request->imagen_foco_x ?? $focoImagen[0] ?? 50),
+            'imagen_foco_y' => (int) ($request->imagen_foco_y ?? $focoImagen[1] ?? 50),
             'template'     => $request->template ?? 'clasico',
             'personaje_origen' => $personajeOrigen,
             'personaje_path'   => $personajePath,
@@ -162,7 +168,10 @@ class MensajeController extends Controller
 
         $plantilla = $mensaje->ocasion->plantilla_vista ?? 'mensajes.show';
 
-        return view($plantilla, compact('mensaje'));
+        $imagenFocoX = (int) ($mensaje->imagen_foco_x ?? 50);
+        $imagenFocoY = (int) ($mensaje->imagen_foco_y ?? 50);
+
+        return view($plantilla, compact('mensaje', 'imagenFocoX', 'imagenFocoY'));
     }
 
     /**
@@ -239,6 +248,8 @@ class MensajeController extends Controller
             'imagen'       => ['nullable', 'image', 'max:5120'],
             'imagen_forma' => ['nullable', 'string', 'in:ninguna,cuadrado,circulo,corazon,estrella,hexagono,diamante'],
             'imagen_marco' => ['nullable', 'string', 'in:ninguno,morado,dorado,rosa,verde,sombra,blanco'],
+            'imagen_foco_x' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'imagen_foco_y' => ['nullable', 'integer', 'min:0', 'max:100'],
             'template'     => ['nullable', 'string', 'in:' . implode(',', array_keys(TemplateHelper::configsParaPreview()))],
             'eliminar_imagen' => ['nullable', 'boolean'],
             'personaje_origen' => ['nullable', 'string', 'in:tema,dicebear,custom,ninguno'],
@@ -266,6 +277,8 @@ class MensajeController extends Controller
             'audio_scale'        => (int) ($request->audio_scale ?? $mensaje->audio_scale ?? 100),
             'imagen_forma' => $request->imagen_forma ?? $mensaje->imagen_forma,
             'imagen_marco' => $request->imagen_marco ?? $mensaje->imagen_marco,
+            'imagen_foco_x' => (int) ($request->imagen_foco_x ?? $mensaje->imagen_foco_x ?? 50),
+            'imagen_foco_y' => (int) ($request->imagen_foco_y ?? $mensaje->imagen_foco_y ?? 50),
             'template'     => $request->template ?? $mensaje->template,
             'personaje_origen' => $request->personaje_origen ?? $mensaje->personaje_origen,
             'personaje_estilo' => $request->personaje_estilo ?? $mensaje->personaje_estilo,
@@ -297,6 +310,9 @@ class MensajeController extends Controller
             if ($mensaje->imagen_path) {
                 Storage::disk('public')->delete($mensaje->imagen_path);
             }
+            $focoImagen = $this->focoImagenSugerido($request->file('imagen'));
+            $datos['imagen_foco_x'] = (int) ($request->imagen_foco_x ?? $focoImagen[0] ?? 50);
+            $datos['imagen_foco_y'] = (int) ($request->imagen_foco_y ?? $focoImagen[1] ?? 50);
             $datos['imagen_path'] = $this->guardarImagenMensajeSinRecorte($request->file('imagen'));
         }
 
@@ -392,6 +408,33 @@ class MensajeController extends Controller
             }
             return $fallbackPath;
         }
+    }
+
+    private function focoImagenSugerido(UploadedFile $file): array
+    {
+        $tmpPath = $file->getRealPath();
+        if (!$tmpPath) {
+            return [50, 50];
+        }
+
+        $info = @getimagesize($tmpPath);
+        if (!$info || empty($info[0]) || empty($info[1])) {
+            return [50, 50];
+        }
+
+        $ancho = max(1, (int) $info[0]);
+        $alto  = max(1, (int) $info[1]);
+        $ratio = $ancho / $alto;
+
+        if ($ratio >= 1.35) {
+            return [50, 46];
+        }
+
+        if ($ratio <= 0.75) {
+            return [50, 38];
+        }
+
+        return [50, 50];
     }
 
     private function normalizarOrientacionImagen($src, int $imageType, string $tmpPath)

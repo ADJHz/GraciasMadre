@@ -8,6 +8,14 @@
     $seoType        = trim($__env->yieldContent('og_type', 'website'));
     $seoRobots      = trim($__env->yieldContent('robots', 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'));
     $siteName       = config('app.name', 'Mensajes para Todos');
+    $bodyImageStyle  = '';
+    if (isset($imagenFocoX) || isset($imagenFocoY)) {
+        $bodyImageStyle = sprintf(
+            '--mensaje-foco-x: %d%%; --mensaje-foco-y: %d%%;',
+            (int) ($imagenFocoX ?? 50),
+            (int) ($imagenFocoY ?? 50)
+        );
+    }
 @endphp
 <html lang="es">
 <head>
@@ -100,7 +108,7 @@
     @stack('styles')
     @stack('head')
 </head>
-<body class="bg-app-bg font-app-body text-app-text antialiased">
+<body class="bg-app-bg font-app-body text-app-text antialiased" @if($bodyImageStyle) style="{{ $bodyImageStyle }}" @endif>
 
     {{-- Navbar --}}
     <nav class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-violet-100 shadow-sm">

@@ -13,7 +13,7 @@ class MensajePlataforma extends Model
     protected $fillable = [
         'user_id', 'ocasion_id', 'code', 'destinatario',
         'mensaje', 'remitente', 'youtube_url', 'estado',
-        'imagen_path', 'imagen_forma', 'imagen_marco', 'template',
+        'imagen_path', 'imagen_forma', 'imagen_marco', 'imagen_foco_x', 'imagen_foco_y', 'template',
         'personaje_origen', 'personaje_path', 'personaje_estilo', 'personaje_seed',
         'audio_url', 'audio_titulo', 'audio_artista', 'audio_thumb', 'audio_start', 'audio_end',
         'audio_display_mode', 'audio_lyrics',
@@ -27,6 +27,8 @@ class MensajePlataforma extends Model
         'audio_pos_x' => 'integer',
         'audio_pos_y' => 'integer',
         'audio_scale' => 'integer',
+        'imagen_foco_x' => 'integer',
+        'imagen_foco_y' => 'integer',
     ];
 
     public function user(): BelongsTo

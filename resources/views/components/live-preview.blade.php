@@ -94,6 +94,8 @@ function livePreview() {
             remitente: '',
             mensajeHTML: '',
             imagenPreview: null,
+            imagenFocusX: 50,
+            imagenFocusY: 50,
             imagenForma: 'circulo',
             imagenMarco: 'ninguno',
         },
@@ -101,6 +103,8 @@ function livePreview() {
 
         actualizarData(detail) {
             this.data = { ...this.data, ...detail };
+            this.data.imagenFocusX = Number(detail.imagenFocusX ?? this.data.imagenFocusX ?? 50);
+            this.data.imagenFocusY = Number(detail.imagenFocusY ?? this.data.imagenFocusY ?? 50);
             this.template = detail.template || this.template;
             clearTimeout(this.debounceTimer);
             this.debounceTimer = setTimeout(() => this.renderPreview(), 120);
@@ -135,7 +139,7 @@ function livePreview() {
             const estiloForma = formas[d.imagenForma] || '';
             const estiloMarco = marcos[d.imagenMarco] || '';
             const imgHtml = d.imagenPreview
-                ? `<div style="${estiloMarco}" class="flex justify-center my-3"><div style="width:80px;height:80px;overflow:hidden;${estiloForma}"><img src="${d.imagenPreview}" style="width:100%;height:100%;object-fit:contain;background:#fff;" alt=""></div></div>`
+                ? `<div style="${estiloMarco}" class="flex justify-center my-3"><div style="width:80px;height:80px;overflow:hidden;${estiloForma}"><img src="${d.imagenPreview}" style="width:100%;height:100%;object-fit:cover;object-position:${d.imagenFocusX}% ${d.imagenFocusY}%;background:#fff;" alt=""></div></div>`
                 : '';
 
             const configs = {
