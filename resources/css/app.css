@@ -65,6 +65,17 @@
   100% { background-position: 200% center; }
 }
 
+@layer base {
+  /* Fotos con forma: llenan mejor el recorte y respetan la orientación original. */
+  img[class*="img-"],
+  [class*="shape-"] > img {
+    object-fit: cover !important;
+    object-position: center center;
+    image-orientation: from-image;
+    display: block;
+  }
+}
+
 .animate-float-slow { animation: float-slow 6s ease-in-out infinite; }
 .animate-float-medium { animation: float-medium 4s ease-in-out infinite; }
 .animate-petal-spin { animation: petal-spin 8s linear infinite; }

@@ -342,6 +342,8 @@ class MensajeController extends Controller
         }
 
         try {
+            $src = $this->normalizarOrientacionImagen($src, (int) $info[2], $tmpPath);
+
             $srcW = imagesx($src);
             $srcH = imagesy($src);
             if ($srcW <= 0 || $srcH <= 0) {
@@ -353,22 +355,19 @@ class MensajeController extends Controller
             $scale = min(1, $maxSide / max($srcW, $srcH));
             $dstW = max(1, (int) round($srcW * $scale));
             $dstH = max(1, (int) round($srcH * $scale));
-            $canvasSize = max($dstW, $dstH);
 
-            $canvas = imagecreatetruecolor($canvasSize, $canvasSize);
+            $canvas = imagecreatetruecolor($dstW, $dstH);
             if (!$canvas) {
                 imagedestroy($src);
                 return $fallbackPath;
             }
 
-            // Fondo blanco para conservar imagen completa sin recortes en contenedores cuadrados.
+            // Fondo blanco para que las transparencias se vean limpias al exportar a JPG.
             $bg = imagecolorallocate($canvas, 255, 255, 255);
             imagefill($canvas, 0, 0, $bg);
             imagealphablending($canvas, true);
 
-            $dstX = (int) floor(($canvasSize - $dstW) / 2);
-            $dstY = (int) floor(($canvasSize - $dstH) / 2);
-            imagecopyresampled($canvas, $src, $dstX, $dstY, 0, 0, $dstW, $dstH, $srcW, $srcH);
+            imagecopyresampled($canvas, $src, 0, 0, 0, 0, $dstW, $dstH, $srcW, $srcH);
 
             $relativePath = 'mensajes/' . (string) Str::uuid() . '.jpg';
             $absolutePath = Storage::disk('public')->path($relativePath);
@@ -393,6 +392,69 @@ class MensajeController extends Controller
             }
             return $fallbackPath;
         }
+    }
+
+    private function normalizarOrientacionImagen($src, int $imageType, string $tmpPath)
+    {
+        if ($imageType !== IMAGETYPE_JPEG || !function_exists('exif_read_data')) {
+            return $src;
+        }
+
+        $exif = @exif_read_data($tmpPath);
+        $orientation = (int) ($exif['Orientation'] ?? 1);
+
+        if ($orientation === 1) {
+            return $src;
+        }
+
+        $rotated = null;
+
+        switch ($orientation) {
+            case 2:
+                if (function_exists('imageflip')) {
+                    imageflip($src, IMG_FLIP_HORIZONTAL);
+                }
+                return $src;
+
+            case 3:
+                $rotated = imagerotate($src, 180, 0);
+                break;
+
+            case 4:
+                if (function_exists('imageflip')) {
+                    imageflip($src, IMG_FLIP_VERTICAL);
+                }
+                return $src;
+
+            case 5:
+                if (function_exists('imageflip')) {
+                    imageflip($src, IMG_FLIP_HORIZONTAL);
+                }
+                $rotated = imagerotate($src, -90, 0);
+                break;
+
+            case 6:
+                $rotated = imagerotate($src, -90, 0);
+                break;
+
+            case 7:
+                if (function_exists('imageflip')) {
+                    imageflip($src, IMG_FLIP_HORIZONTAL);
+                }
+                $rotated = imagerotate($src, 90, 0);
+                break;
+
+            case 8:
+                $rotated = imagerotate($src, 90, 0);
+                break;
+        }
+
+        if ($rotated instanceof \GdImage || is_resource($rotated)) {
+            imagedestroy($src);
+            return $rotated;
+        }
+
+        return $src;
     }
 
     /**
